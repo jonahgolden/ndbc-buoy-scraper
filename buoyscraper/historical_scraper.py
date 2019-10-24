@@ -1,0 +1,253 @@
+"""
+Jonah Golden, 2019
+Class to scrape historical data from NDBC Buoys -- https://www.ndbc.noaa.gov/historical_data.shtml
+Creates pandas dataframe objects for specific data types and time periods.
+Options to return or pickle dataframes.
+
+Notes:
+    * Current implementation scrapes data from 2007 through most recent month.
+        Data before 2007 was formatted slightly differently, and requires some tweaking of functions.
+"""
+
+import pandas as pd
+from datetime import datetime
+from .buoy_data_scraper import BuoyDataScraper
+
+class HistoricalScraper(BuoyDataScraper):
+
+    DTYPES = {"stdmet":{"url_code":"h", "name":"Standard metorological"},
+              "swden": {"url_code":"w", "name":"Spectral wave density"},
+              "swdir": {"url_code":"d", "name":"Spectral wave (alpha1) direction"},
+              "swdir2":{"url_code":"i", "name":"Spectral wave (alpha2) direction"},
+              "swr1":  {"url_code":"j", "name":"Spectral wave (r1) direction"},
+              "swr2":  {"url_code":"k", "name":"Spectral wave (r2) direction"},
+              "adcp":  {"url_code":"a", "name":"Ocean current"},
+              "cwind": {"url_code":"c", "name":"Continuous winds"}
+              }
+    BASE_URL_YEAR = "https://www.ndbc.noaa.gov/view_text_file.php?filename={}{}{}.txt.gz&dir=data/historical/{}/"
+    BASE_URL_MONTH = "https://www.ndbc.noaa.gov/view_text_file.php?filename={}{}{}.txt.gz&dir=data/{}/{}/"
+    MONTHS = {1: {"name":"Jan", "url_code":1},
+              2: {"name":"Feb", "url_code":2},
+              3: {"name":"Mar", "url_code":3},
+              4: {"name":"Apr", "url_code":4},
+              5: {"name":"May", "url_code":5},
+              6: {"name":"Jun", "url_code":6},
+              7: {"name":"Jul", "url_code":7},
+              8: {"name":"Aug", "url_code":8},
+              9: {"name":"Sep", "url_code":9},
+              10:{"name":"Oct", "url_code":'a'},
+              11:{"name":"Nov", "url_code":'b'},
+              12:{"name":"Dec", "url_code":'c'}
+              }
+    MIN_YEAR = 2007
+
+    def __init__(self, buoy_id, data_dir="data/"):
+            super().__init__(buoy_id)
+            self.data_dir = "{}{}/historical/".format(data_dir, buoy_id)
+
+    def scrape_all_dtypes(self, data_dir=None):
+        '''
+        Scrapes and saves all known historical data for this buoy.
+        Input :
+            data_dir : string, directory to save data to.
+        Notes : * If data_dir doesn't exist, it will be created.
+                * Existing files will be overwritten.
+        '''
+        for dtype in self.DTYPES:
+            self.scrape_dtype(dtype, save=True, data_dir=data_dir)
+
+    def scrape_dtype(self, dtype, save=False, data_dir=None):
+        '''
+        Scrapes and optionally saves all historical data for a given dtype.
+        Input :
+            dtype : string, must be an available data type for this buoy
+            save_pkl : default False. If True, saves data frame as pickle.
+            data_dir : default self.data_dir.  directory to save data to is save_pkl is True.
+        Output :
+            pandas dataframe. If save_pkl is True, also saves pickled dataframe.
+        Notes : * If data_dir doesn't exist, it will be created.
+                * If save_pkl is True, existing file will be overwritten.
+        '''
+        df = pd.DataFrame()
+        for year in range(self.MIN_YEAR, datetime.now().year):
+            try:
+                data = self.scrape_year(dtype, year)
+                if df.empty:
+                    df = data
+                else:
+                    df = df.append(data)
+            except:
+                pass
+        for month in range(1, datetime.now().month):
+            try:
+                data = self.scrape_month(dtype, month)
+                if df.empty:
+                    df = data
+                else:
+                    df = df.append(data)
+            except:
+                pass
+        if not df.empty:
+            if save:
+                if not data_dir: data_dir = self.data_dir
+                self._create_dir_if_not_exists(data_dir)
+                path = "{}{}.pkl".format(data_dir, dtype)
+                df.to_pickle(path)
+                print("Saved data to {}".format(path))
+            else:
+                return df
+        return None
+
+    def scrape_year(self, dtype, year):
+        '''
+        Scrapes data for a given dtype and year. Calls helper function to scrape specific dtype.
+        See helper functions below for columns and units of each dtype.
+        More info at: https://www.ndbc.noaa.gov/measdes.shtml
+        Input :
+            dtype : string, must be an available data type for this buoy
+            year : int in range 2006 and this year, not inclusive.
+        Output :
+            pandas dataframe.
+        '''
+        this_year = datetime.now().year 
+        if year < self.MIN_YEAR or year >= this_year:
+            raise Exception("year parameter must be between in range [{}, {}]".format(self.MIN_YEAR, this_year-1))
+        url = self._make_url_year(dtype, year)
+        if self._url_valid(url):
+            df = getattr(self, dtype)(url)
+            return df
+        else:
+            raise Exception("No data exists for buoy: {}, dtype: {}, year: {}".format(self.buoy_id, dtype, year))
+
+    def scrape_month(self, dtype, month):
+        '''
+        Scrapes data for a given dtype and month. Calls helper function to scrape specific dtype.
+        See helper functions below for columns and units of each dtype.
+        More info at: https://www.ndbc.noaa.gov/measdes.shtml
+        Input :
+            dtype : string, must be an available data type for this buoy
+            month : int in range 0 and this month, not inclusive.
+        Output :
+            pandas dataframe.
+        Note: Data for most recent month may not yet be available.
+        '''
+        url = self._make_url_month(dtype, month)
+        if self._url_valid(url):
+            df = getattr(self, "_scrape_{}".format(dtype))(url)
+            return df
+        else:
+            raise Exception("No data exists for buoy: {}, dtype: {}, month: {}".format(self.buoy_id, dtype, month))
+
+    def stdmet(self, url):
+        '''
+        Standard Meteorological Data
+        dtype:   "stdmet"
+        index:   datetime64[ns, UTC]
+        columns: WDIR  WSPD  GST  WVHT  DPD  APD  MWD  PRES  ATMP  WTMP  DEWP  VIS  PTDY  TIDE
+        units:   degT  m/s   m/s   m    sec  sec  degT  hPa  degC  degC  degC  nmi  hPa    ft
+        '''
+        HEADERS, NA_VALS = [0,1], ['MM', 99.0, 99.00, 999]
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        df.columns.name = 'columns'
+        return df
+
+    def swden(self, url):
+        '''
+        Supplemental Measurements Data
+        dtype:   "supl"
+        index:   datetime64[ns, UTC]
+        columns: .0200  .0325  .0375  ...  .4450  .4650  .4850 (frequencies in Hz)
+        units:   Spectral Wave Density/Energy in m^2/Hz for each frequency bin
+        '''
+        HEADERS, NA_VALS = [0,1], ['MM']
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        df.columns.name = 'frequencies'
+        return df
+
+    def swdir(self, url):
+        '''
+        Spectral Wave Data (alpha1, mean wave direction)
+        dtype:   "swdir"
+        index:   datetime64[ns, UTC]
+        columns: 0.033  0.038  0.043 ... 0.445	0.465	0.485 (frequencies in Hz)
+        units:   direction (in degrees from true North, clockwise) for each frequency bin.
+        '''
+        HEADERS, NA_VALS = [0,1], ['MM', 999.0]
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        df.columns.name = 'frequencies'
+        return df.astype('float')
+
+    def swdir2(self, url):
+        '''
+        Spectral Wave Data (alpha2, principal wave direction)
+        dtype:   "swdir2"
+        index:   datetime64[ns, UTC]
+        columns: 0.033  0.038  0.043 ... 0.445	0.465	0.485 (frequencies in Hz)
+        units:   direction (in degrees from true North, clockwise) for each frequency bin.
+        '''
+        HEADERS, NA_VALS= [0,1], ['MM', 999.0]
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        df.columns.name = 'frequencies'
+        return df.astype('float')
+
+    def scrape_swr1(self, url):
+        '''
+        Spectral Wave Data (r1, directional spreading for alpha1)
+        dtype:   "swr1"
+        index:   datetime64[ns, UTC]
+        columns: 0.033  0.038  0.043 ... 0.445	0.465	0.485 (frequencies in Hz)
+        units:   Ratio (between 0 and 100) describing the spreading about the main direction.
+        Note:    r1 and r2 historical values are scaled by 100.
+                 Units are hundredths, so they are multiplied by 0.01 here.
+        '''
+        HEADERS, NA_VALS, FACTOR = [0,1], ['MM', 999.0], 0.01
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        df.columns.name = 'frequencies'
+        df[df.select_dtypes(include=['number']).columns] *= FACTOR
+        return df
+
+    def swr2(self, url):
+        '''
+        Spectral Wave Data (r2, directional spreading for alpha2)
+        dtype:   "swr2"
+        index:   datetime64[ns, UTC]
+        columns: 0.033  0.038  0.043 ... 0.445	0.465	0.485 (frequencies in Hz)
+        units:   Ratio (between 0 and 100) describing the spreading about the main direction.
+        Note:    r1 and r2 historical values are scaled by 100.
+                 Units are hundredths, so they are multiplied by 0.01 here.
+        '''
+        HEADERS, NA_VALS, FACTOR = [0,1], ['MM', 999.0], 0.01
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        df.columns.name = 'frequencies'
+        df[df.select_dtypes(include=['number']).columns] *= FACTOR
+        return df
+
+    def adcp(self, url):
+        '''
+        Acoustic Doppler Current Profiler Data
+        dtype:   "adcp"
+        index:   datetime64[ns, UTC]
+        columns: DEP01  DIR01  SPD01
+        units:   m      degT   cm/s
+        '''
+        HEADERS, NA_VALS = [0,1], ['MM']
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        return df.iloc[:,0:3].astype('float')
+
+    def cwind(self, url):
+        '''
+        Continuous Winds Data
+        dtype:   "cwind"
+        index:   datetime64[ns, UTC]
+        columns: WDIR  WSPD  GDR  GST  GTIME
+        units:   degT  m/s   degT m/s  hhmm
+        '''
+        HEADERS, NA_VALS = [0,1], ['MM', 99.0, 999, 9999]
+        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        return df
+
+    def _make_url_year(self, dtype, year):
+        return self.BASE_URL_YEAR.format(self.buoy_id, self.DTYPES[dtype]["url_code"], year, dtype)
+
+    def _make_url_month(self, dtype, month):
+        return self.BASE_URL_MONTH.format(self.buoy_id, self.MONTHS[month]["url_code"], datetime.now().year, dtype, self.MONTHS[month]["name"])
