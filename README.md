@@ -4,7 +4,7 @@
 
 ## Use
 ---
-All data can be accessed using the RealtimeScraper and HistoricalScraper classes.  Both classes take a buoy id to initialize, contain metadata about the buoy, and have similar methods for retrieving data, and 
+All data can be accessed using the RealtimeScraper and HistoricalScraper classes.  Both classes take a buoy id to initialize, contain metadata about the buoy, and have similar methods for retrieving data.
 
 ### Metadata
 All supported metadata is generated as a dictionary when an object is initialized.
