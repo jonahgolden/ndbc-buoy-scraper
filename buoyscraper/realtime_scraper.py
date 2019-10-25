@@ -25,38 +25,39 @@ class RealtimeScraper(BuoyDataScraper):
               "swdir":    {"url_code":"swdir",     "name":"Spectral Wave Data (alpha1)"},
               "swdir2":   {"url_code":"swdir2",    "name":"Spectral Wave Data (alpha2)"},
               "swr1":     {"url_code":"swr1",      "name":"Spectral Wave Data (r1)"},
-              "swr2":     {"url_code":"swr2",      "name":"Spectral Wave Data (r2)"}
+              "swr2":     {"url_code":"swr2",      "name":"Spectral Wave Data (r2)"},
+              "ocean":    {"url_code":"ocean",     "name":"Oceanographic"},
+              "srad":     {"url_code":"srad",      "name":"Solar Radiation"},
               }
     BASE_URL = "https://www.ndbc.noaa.gov/data/realtime2/{}.{}"
 
-    def __init__(self, buoy_id, data_dir = "data/"):
+    def __init__(self, buoy_id, data_dir="buoydata/"):
         super().__init__(buoy_id)
         self.data_dir = "{}{}/realtime/".format(data_dir, buoy_id)
 
-    def get_available_dtypes(self):
+    def get_available_dtypes(self, dtypes=DTYPES):
         '''
         Returns list of available realtime data types for this buoy.
         '''
         available_types = []
-        for dtype in self.DTYPES:
+        for dtype in dtypes:
             if self._url_valid(self._make_url(dtype)):
                 available_types.append(dtype)
         return available_types
 
-    def scrape_all_dtypes(self, data_dir=None):
+    def scrape_dtypes(self, dtypes=None):
         '''
         Scrapes and saves all data types for this buoy for realtime data (the last 45 days).
         Input :
-            data_dir (optional) : string representing data directory to save dataframes to as pickles.
-                                  if unspecified, will use classes data directory (default = "../data/").
+            dtypes : Optional, list of dtype strings. Default is all available dtypes.
         Output :
             saves all dtypes available for this buoy as pandas dataframe pickles.
             dtypes with previously saved pickles in data_dir will be updated with new data.
         '''
-        if not data_dir: data_dir = self.data_dir
-        self._create_dir_if_not_exists(data_dir)
-        for dtype in self.get_available_dtypes():
-            self.scrape_dtype(dtype, save=True, save_path="{}{}.pkl".format(data_dir, dtype))
+        self._create_dir_if_not_exists(self.data_dir)
+        if not dtypes: dtypes=self.DTYPES
+        for dtype in self.get_available_dtypes(dtypes):
+            self.scrape_dtype(dtype, save=True)
 
     def scrape_dtype(self, dtype, save=False, save_path=None):
         '''
@@ -90,8 +91,8 @@ class RealtimeScraper(BuoyDataScraper):
         columns: WDIR  WSPD  GST  WVHT  DPD  APD  MWD  PRES  ATMP  WTMP  DEWP  VIS  PTDY  TIDE
         units:   degT  m/s   m/s   m    sec  sec  degT  hPa  degC  degC  degC  nmi  hPa    ft
         '''
-        HEADERS, NA_VALS = [0,1], ['MM']
-        return self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM']
+        return self._scrape_norm(url, na_vals=NA_VALS)
 
     def adcp(self, url):
         '''
@@ -101,8 +102,8 @@ class RealtimeScraper(BuoyDataScraper):
         columns: DEP01  DIR01  SPD01
         units:   m      degT   cm/s
         '''
-        HEADERS, NA_VALS = [0,1], ['MM']
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM']
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         return df.iloc[:,0:3].astype('float')
 
     def cwind(self, url):
@@ -113,8 +114,8 @@ class RealtimeScraper(BuoyDataScraper):
         columns: WDIR  WSPD  GDR  GST  GTIME
         units:   degT  m/s   degT m/s  hhmm
         '''
-        HEADERS, NA_VALS = [0,1], ['MM', 99.0, 999, 9999]
-        return self._scrape_norm(url, HEADERS, NA_VALS).astype('float')
+        NA_VALS = ['MM', 99.0, 999, 9999]
+        return self._scrape_norm(url, na_vals=NA_VALS).astype('float')
 
     def supl(self, url):
         '''
@@ -124,8 +125,8 @@ class RealtimeScraper(BuoyDataScraper):
         columns: PRES  PTIME  WSPD  WDIR  WTIME
         units:   hPa   hhmm   m/s   degT  hhmm
         '''
-        HEADERS, NA_VALS = [0,1], ['MM']
-        return self._scrape_norm(url, HEADERS, NA_VALS).astype('float')
+        NA_VALS = ['MM']
+        return self._scrape_norm(url, na_vals=NA_VALS).astype('float')
 
     def spec(self, url):
         '''
@@ -135,8 +136,8 @@ class RealtimeScraper(BuoyDataScraper):
         columns: WVHT  SwH  SwP  WWH  WWP  SwD  WWD  STEEPNESS  APD  MWD
         units:   m     m    sec   m   sec   -   degT     -      sec  degT
         '''
-        HEADERS, NA_VALS = [0,1], ['MM', -99]
-        return self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM', -99]
+        return self._scrape_norm(url, na_vals=NA_VALS)
 
     def data_spec(self, url):
         '''
@@ -207,6 +208,28 @@ class RealtimeScraper(BuoyDataScraper):
         '''
         NA_VALS = ['MM', 999.0]
         return self._scrape_spectral(url, NA_VALS)
+
+    def ocean(self, url):
+        '''
+        Oceanographic Data
+        dtype:   "ocean"
+        index:   datetime64[ns, UTC]
+        columns: DEPTH  OTMP  COND   SAL  O2%  O2PPM  CLCON  TURB  PH  EH
+        units:   m      degC  mS/cm  psu  %    ppm    ug/l   FTU   -   mv
+        '''
+        NA_VALS = ['MM']
+        return self._scrape_norm(url, na_vals=NA_VALS)
+
+    def srad(self, url):
+        '''
+        Solar Radiation
+        dtype:   "srad"
+        index:   datetime64[ns, UTC]
+        columns: SRAD1  SWRAD  LWRAD
+        units:   w/m2   w/m2   w/m2
+        '''
+        NA_VALS = ['MM']
+        return self._scrape_norm(url, na_vals=NA_VALS)
 
     def _scrape_spectral(self, url, na_vals):
         '''

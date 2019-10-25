@@ -22,7 +22,9 @@ class HistoricalScraper(BuoyDataScraper):
               "swr1":  {"url_code":"j", "name":"Spectral wave (r1) direction"},
               "swr2":  {"url_code":"k", "name":"Spectral wave (r2) direction"},
               "adcp":  {"url_code":"a", "name":"Ocean current"},
-              "cwind": {"url_code":"c", "name":"Continuous winds"}
+              "cwind": {"url_code":"c", "name":"Continuous winds"},
+              "ocean": {"url_code":"o", "name":"Oceanographic"},
+              "dart":  {"url_code":"t", "name":"Water column height (Tsunami) (DART)"}
               }
     BASE_URL_YEAR = "https://www.ndbc.noaa.gov/view_text_file.php?filename={}{}{}.txt.gz&dir=data/historical/{}/"
     BASE_URL_MONTH = "https://www.ndbc.noaa.gov/view_text_file.php?filename={}{}{}.txt.gz&dir=data/{}/{}/"
@@ -41,22 +43,23 @@ class HistoricalScraper(BuoyDataScraper):
               }
     MIN_YEAR = 2007
 
-    def __init__(self, buoy_id, data_dir="data/"):
+    def __init__(self, buoy_id, data_dir="buoydata/"):
             super().__init__(buoy_id)
             self.data_dir = "{}{}/historical/".format(data_dir, buoy_id)
 
-    def scrape_all_dtypes(self, data_dir=None):
+    def scrape_dtypes(self, dtypes=None):
         '''
         Scrapes and saves all known historical data for this buoy.
         Input :
-            data_dir : string, directory to save data to.
-        Notes : * If data_dir doesn't exist, it will be created.
+            dtypes : Optional, list of dtype strings. Default is all available dtypes.
+        Notes : * If self.data_dir doesn't exist, it will be created.
                 * Existing files will be overwritten.
         '''
-        for dtype in self.DTYPES:
-            self.scrape_dtype(dtype, save=True, data_dir=data_dir)
+        if not dtypes: dtypes=self.DTYPES
+        for dtype in dtypes:
+            self.scrape_dtype(dtype, save=True)
 
-    def scrape_dtype(self, dtype, save=False, data_dir=None):
+    def scrape_dtype(self, dtype, save=False):
         '''
         Scrapes and optionally saves all historical data for a given dtype.
         Input :
@@ -65,7 +68,7 @@ class HistoricalScraper(BuoyDataScraper):
             data_dir : default self.data_dir.  directory to save data to is save_pkl is True.
         Output :
             pandas dataframe. If save_pkl is True, also saves pickled dataframe.
-        Notes : * If data_dir doesn't exist, it will be created.
+        Notes : * If self.data_dir doesn't exist, it will be created.
                 * If save_pkl is True, existing file will be overwritten.
         '''
         df = pd.DataFrame()
@@ -89,9 +92,8 @@ class HistoricalScraper(BuoyDataScraper):
                 pass
         if not df.empty:
             if save:
-                if not data_dir: data_dir = self.data_dir
-                self._create_dir_if_not_exists(data_dir)
-                path = "{}{}.pkl".format(data_dir, dtype)
+                self._create_dir_if_not_exists(self.data_dir)
+                path = "{}{}.pkl".format(self.data_dir, dtype)
                 df.to_pickle(path)
                 print("Saved data to {}".format(path))
             else:
@@ -146,21 +148,21 @@ class HistoricalScraper(BuoyDataScraper):
         columns: WDIR  WSPD  GST  WVHT  DPD  APD  MWD  PRES  ATMP  WTMP  DEWP  VIS  PTDY  TIDE
         units:   degT  m/s   m/s   m    sec  sec  degT  hPa  degC  degC  degC  nmi  hPa    ft
         '''
-        HEADERS, NA_VALS = [0,1], ['MM', 99.0, 99.00, 999]
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM', 99., 999.]
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         df.columns.name = 'columns'
         return df
 
     def swden(self, url):
         '''
-        Supplemental Measurements Data
-        dtype:   "supl"
+        Spectral wave density
+        dtype:   "swden"
         index:   datetime64[ns, UTC]
         columns: .0200  .0325  .0375  ...  .4450  .4650  .4850 (frequencies in Hz)
         units:   Spectral Wave Density/Energy in m^2/Hz for each frequency bin
         '''
-        HEADERS, NA_VALS = [0,1], ['MM']
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM']
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         df.columns.name = 'frequencies'
         return df
 
@@ -172,8 +174,8 @@ class HistoricalScraper(BuoyDataScraper):
         columns: 0.033  0.038  0.043 ... 0.445	0.465	0.485 (frequencies in Hz)
         units:   direction (in degrees from true North, clockwise) for each frequency bin.
         '''
-        HEADERS, NA_VALS = [0,1], ['MM', 999.0]
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM', 999.]
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         df.columns.name = 'frequencies'
         return df.astype('float')
 
@@ -185,8 +187,8 @@ class HistoricalScraper(BuoyDataScraper):
         columns: 0.033  0.038  0.043 ... 0.445	0.465	0.485 (frequencies in Hz)
         units:   direction (in degrees from true North, clockwise) for each frequency bin.
         '''
-        HEADERS, NA_VALS= [0,1], ['MM', 999.0]
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS= ['MM', 999.]
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         df.columns.name = 'frequencies'
         return df.astype('float')
 
@@ -200,8 +202,8 @@ class HistoricalScraper(BuoyDataScraper):
         Note:    r1 and r2 historical values are scaled by 100.
                  Units are hundredths, so they are multiplied by 0.01 here.
         '''
-        HEADERS, NA_VALS, FACTOR = [0,1], ['MM', 999.0], 0.01
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS, FACTOR = ['MM', 999.], 0.01
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         df.columns.name = 'frequencies'
         df[df.select_dtypes(include=['number']).columns] *= FACTOR
         return df
@@ -216,8 +218,8 @@ class HistoricalScraper(BuoyDataScraper):
         Note:    r1 and r2 historical values are scaled by 100.
                  Units are hundredths, so they are multiplied by 0.01 here.
         '''
-        HEADERS, NA_VALS, FACTOR = [0,1], ['MM', 999.0], 0.01
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS, FACTOR = ['MM', 999.], 0.01
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         df.columns.name = 'frequencies'
         df[df.select_dtypes(include=['number']).columns] *= FACTOR
         return df
@@ -230,8 +232,8 @@ class HistoricalScraper(BuoyDataScraper):
         columns: DEP01  DIR01  SPD01
         units:   m      degT   cm/s
         '''
-        HEADERS, NA_VALS = [0,1], ['MM']
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM']
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         return df.iloc[:,0:3].astype('float')
 
     def cwind(self, url):
@@ -242,9 +244,35 @@ class HistoricalScraper(BuoyDataScraper):
         columns: WDIR  WSPD  GDR  GST  GTIME
         units:   degT  m/s   degT m/s  hhmm
         '''
-        HEADERS, NA_VALS = [0,1], ['MM', 99.0, 999, 9999]
-        df = self._scrape_norm(url, HEADERS, NA_VALS)
+        NA_VALS = ['MM', 99., 999., 9999.]
+        df = self._scrape_norm(url, na_vals=NA_VALS)
         return df
+
+    def ocean(self, url):
+        '''
+        Oceanographic Data
+        dtype:   "ocean"
+        index:   datetime64[ns, UTC]
+        columns: DEPTH  OTMP  COND   SAL  O2%  O2PPM  CLCON  TURB  PH  EH
+        units:   m      degC  mS/cm  psu  %    ppm    ug/l   FTU   -   mv
+        '''
+        NA_VALS = ['MM', 99., 999.]
+        return self._scrape_norm(url, na_vals=NA_VALS)
+
+    def dart(self, url):
+        '''
+        Water column height (Tsunami) (DART)
+        dtype:   "dart"
+        index:   datetime64[ns, UTC]
+        columns: T                           HEIGHT
+        units:   enum (measurement type)     m (height of water column)
+                 * 1 = 15-minute
+                 * 2 = 1-minute
+                 * 3 = 15-second
+        Notes : * See Tsunami detection algorithm here: https://www.ndbc.noaa.gov/dart/algorithm.shtml  
+        '''
+        NA_VALS, DATE_COLS, DATE_FORMAT = ['MM', 9999.], [0,1,2,3,4,5], "%Y %m %d %H %M %S"
+        return self._scrape_norm(url, na_vals=NA_VALS, date_cols=DATE_COLS, date_format=DATE_FORMAT)
 
     def _make_url_year(self, dtype, year):
         return self.BASE_URL_YEAR.format(self.buoy_id, self.DTYPES[dtype]["url_code"], year, dtype)
