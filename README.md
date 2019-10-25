@@ -9,21 +9,23 @@
 
 ## Use
 ---
-All data can be accessed using the Buoy class. A Buoy object takes an [NDBC buoy id](https://www.ndbc.noaa.gov/) to initialize, and optionally, a directory to save data to (default is "buoydata/"). Buoy objects contain metadata about the buoy and methods for retrieving and saving historical and realtime data from the specified buoy.
+All data can be accessed using the `Buoy` class. A Buoy object is initialized with an [NDBC buoy id](https://www.ndbc.noaa.gov/), and optionally, a directory to save data to (default is "buoydata/"). Buoy objects contain metadata about the buoy and methods for retrieving and saving historical and realtime data from the specified buoy.
 
 ### Realtime Data
 Realtime data is available for the most recent 45 days. Currently available **realtime dtypes are:**
 
-- "stdmet" (Standard Meteorological Data)
-- "adcp" (Acoustic Doppler Current Profiler Data)
-- "cwind" (Continuous Winds Data)
-- "supl" (Supplemental Measurements Data)
-- "spec" (Spectral Wave Summary Data)
-- "data_spec" (Raw Spectral Wave Data)
-- "swdir" (Spectral Wave Data alpha1)
-- "swdir2" (Spectral Wave Data alpha2)
-- "swr1" (Spectral Wave Data r1)
-- "swr2" (Spectral Wave Data r2)
+- "stdmet" [Standard Meteorological Data](https://www.ndbc.noaa.gov/measdes.shtml#stdmet)
+- "adcp" [Acoustic Doppler Current Profiler Data](https://www.ndbc.noaa.gov/measdes.shtml#adcp)
+- "cwind" [Continuous Winds Data](https://www.ndbc.noaa.gov/measdes.shtml#cwind)
+- "supl" [Supplemental Measurements Data](https://www.ndbc.noaa.gov/measdes.shtml#supl)
+- "spec" [Spectral Wave Summary Data](https://www.ndbc.noaa.gov/waveobs.shtml)
+- "data_spec" [Raw Spectral Wave Data](https://www.ndbc.noaa.gov/data_spec.shtml)
+- "swdir" [Spectral Wave Data alpha1](https://www.ndbc.noaa.gov/measdes.shtml#swdir)
+- "swdir2" [Spectral Wave Data alpha2](https://www.ndbc.noaa.gov/measdes.shtml#swdir2)
+- "swr1" [Spectral Wave Data r1](https://www.ndbc.noaa.gov/measdes.shtml#swr1)
+- "swr2" [Spectral Wave Data r2](https://www.ndbc.noaa.gov/measdes.shtml#swr2)
+- "ocean" [Oceanographic Data](https://www.ndbc.noaa.gov/measdes.shtml#ocean)
+- "srad" [Solar Radiation Data](https://www.ndbc.noaa.gov/measdes.shtml#srad)
 
 Realtime data for a specific data type is accessed by calling the `get_realtime` method on a Buoy object, which takes a data type as a string input and returns a pandas dataframe. For example:
 ```python
@@ -44,14 +46,16 @@ All realtime data can be saved by calling the `save_realtime` method on a Buoy o
 ### Historical Data
 Historical data is currently available from 2007 through one month ago (sometimes not immediately). Currently available **historical dtypes are:**
 
-- "stdmet" (Standard Meteorological Data)
-- "adcp" (Acoustic Doppler Current Profiler Data)
-- "cwind" (Continuous Winds Data)
-- "swden" (Spectral wave density)
-- "swdir" (Spectral Wave Data alpha1)
-- "swdir2" (Spectral Wave Data alpha2)
-- "swr1" (Spectral Wave Data r1)
-- "swr2" (Spectral Wave Data r2)
+- "stdmet" [Standard Meteorological Data](https://www.ndbc.noaa.gov/measdes.shtml#stdmet)
+- "adcp" [Acoustic Doppler Current Profiler Data](https://www.ndbc.noaa.gov/measdes.shtml#adcp)
+- "cwind" [Continuous Winds Data](https://www.ndbc.noaa.gov/measdes.shtml#cwind)
+- "swden" [Spectral wave density](https://www.ndbc.noaa.gov/measdes.shtml#swden)
+- "swdir" [Spectral Wave Data alpha1](https://www.ndbc.noaa.gov/measdes.shtml#swdir)
+- "swdir2" [Spectral Wave Data alpha2](https://www.ndbc.noaa.gov/measdes.shtml#swdir2)
+- "swr1" [Spectral Wave Data r1](https://www.ndbc.noaa.gov/measdes.shtml#swr1)
+- "swr2" [Spectral Wave Data r2](https://www.ndbc.noaa.gov/measdes.shtml#swr2)
+- "ocean" [Oceanographic Data](https://www.ndbc.noaa.gov/measdes.shtml#ocean)
+- "dart" [Water column height (Tsunami) (DART)](https://www.ndbc.noaa.gov/measdes.shtml#dart)
 
 Historical data for a specific data type is accessed by calling the `get_historical` method on a Buoy object, which takes a data type as a string input and returns a pandas dataframe. For example:
 ```python
@@ -88,7 +92,7 @@ Notes: nan
 ### To Do
 * Add functionality for scraping Canadian buoys, eh?
 * Incorporate "derived2" datatype into realtime scraper
-* Tweak historical scraping functions to allow data scraping pre-2007, when formats were slightly differtent.
+* Tweak historical scraping functions to allow data scraping pre-2007, when formats were slightly different.
 * Add available data types for buoys to their metadata:
     1. Realtime data types.
     2. Historical data types with available years for each.
