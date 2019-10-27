@@ -36,9 +36,7 @@ class RealtimeScraper(BuoyDataScraper):
         self.data_dir = "{}{}/realtime/".format(data_dir, buoy_id)
 
     def get_available_dtypes(self, dtypes=DTYPES):
-        '''
-        Returns list of available realtime data types for this buoy.
-        '''
+        ''' Returns list of available realtime data types for this buoy. '''
         available_types = []
         for dtype in dtypes:
             if self._url_valid(self._make_url(dtype)):
@@ -81,7 +79,7 @@ class RealtimeScraper(BuoyDataScraper):
             else:
                 return df
         else:
-            print("{} not available for buoy {}. Use method 'get_available_dtypes' to see which data types are available for this buoy.".format(dtype, self.buoy_id))
+            return pd.DataFrame()
 
     def stdmet(self, url):
         '''
@@ -256,10 +254,11 @@ class RealtimeScraper(BuoyDataScraper):
         return specs
 
     def _make_url(self, dtype):
+        '''Make url for realtime data type.'''
         return self.BASE_URL.format(self.buoy_id, self.DTYPES[dtype]["url_code"])
 
     def _update_pickle(self, df, path):
-        # If pickle for this dtype exists, add to it
+        '''If pickle for this dtype exists, add to it. Otherwise, create it.'''
         try:
             old_df = pd.read_pickle(path)
             last_update_time = max(old_df.index)
@@ -267,7 +266,6 @@ class RealtimeScraper(BuoyDataScraper):
             new_df = pd.concat([old_df, new_items]).sort_index()
             new_df.to_pickle(path)
             print("Added {} new items to {}".format(len(new_items), path))
-        # Otherwise, create it
         except (OSError, IOError):
             df.to_pickle(path)
             print("Saved data to {}".format(path))

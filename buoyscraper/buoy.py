@@ -49,8 +49,8 @@ class Buoy:
 
     def __init__(self, buoy_id, data_dir="buoydata/"):
         self.buoy_id = str(buoy_id)
+        self.metadata = self._get_metadata()
         self.data_dir = data_dir
-        self._populate_metadata(self.buoy_id)
         self.realtime = RealtimeScraper(self.buoy_id, data_dir)
         self.historical = HistoricalScraper(self.buoy_id, data_dir)
 
@@ -80,15 +80,18 @@ class Buoy:
         '''
         if dtype not in self.realtime.DTYPES:
             print("Possible realtime dtypes are: {}".format(list(self.realtime.DTYPES)))
-            return
-        return self.realtime.scrape_dtype(dtype)
+        else: 
+            df = self.realtime.scrape_dtype(dtype)
+            if df.empty:
+                print("{} not available for buoy {}. Use method 'get_realtime_dtypes' to get available realtime data types for this buoy.".format(dtype, self.buoy_id))
+            else: return df
     
     def get_historical(self, dtype, year=None, month=None):
         '''
         Get realtime data (last 45 days) for specified data type
         Input :
             dtype : string representing data type to get data for.
-            Up to one of the following (default is all available year and months):
+            Up to one of the following (default is all available data):
                 year : int, optional. Single year to get data for.
                 month : int in range [1, 12], optional. Single month this year to get data for.
         Output :
@@ -100,11 +103,17 @@ class Buoy:
         if year and month:
             raise Exception("Can only provide one of `year` and `month`.")
         if year:
-            return self.historical.scrape_year(dtype, year)
+            df = self.historical.scrape_year(dtype, year)
+            if df.empty: print("{} for year {} not available for buoy {}. Use method 'get_historical_dtypes(year={})' to get available historical data types for this buoy and year.".format(dtype,year,self.buoy_id,year))
+            else: return df
         elif month:
-            return self.historical.scrape_month(dtype, month)
+            df = self.historical.scrape_month(dtype, month)
+            if df.empty: print("{} for month {} not available for buoy {}. Use method 'get_historical_dtypes(month={})' to get available historical data types for this buoy and month.".format(dtype,month,self.buoy_id,month))
+            else: return df
         else:
-            return self.historical.scrape_dtype(dtype)
+            df = self.historical.scrape_dtype(dtype)
+            if df.empty: print("{} not available for buoy {}. Use method 'get_historical_dtypes()' to get available historical data types for this buoy.".format(dtype,self.buoy_id))
+            else: return df
     
     def load_realtime(self, dtype, timezone='UTC'):
         '''
@@ -140,36 +149,79 @@ class Buoy:
         except:
             print("{} is not a valid timezone for pandas DataFrame.tz_convert() method.".format(timezone))
 
-
-    def _populate_metadata(self, buoy_id):
-        ''' Helper method to populate metadata field with relevant information. '''
-        STATION_INFO_URL = "https://www.ndbc.noaa.gov/data/stations/station_table.txt"
-        OWNERS_URL = "https://www.ndbc.noaa.gov/data/stations/station_owners.txt"
-        # Get all stations info
-        stations = pd.read_csv(STATION_INFO_URL, delimiter = "|", index_col = 0).iloc[1:,:]
-        # Check if buoy id is valid
-        if str(buoy_id) not in stations.index:
-            raise Exception("{} is not a valid buoy id.".format(buoy_id))
+    @staticmethod
+    def get_buoys():
+        '''Get all available buoys. Returns pandas dataframe with buoy ids as index.'''
+        STATIONS_URL = "https://www.ndbc.noaa.gov/data/stations/station_table.txt"
+        # Get and format all stations info
+        stations = pd.read_csv(STATIONS_URL, delimiter = "|", index_col = 0).iloc[1:,:]
         stations.index.name = 'station_id'
         stations.columns = ['owner', 'ttype', 'hull', 'name', 'payload', 'location', 'timezone', 'forecast', 'note']
-        self.metadata = {}
-        self.metadata['station_id'] = buoy_id
-        # Get owner's info to format with owner code from stations info
+        return stations
+
+    def get_realtime_dtypes(self):
+        '''Returns list of available realtime data types for this buoy.'''
+        return self.realtime.get_available_dtypes()
+
+    def get_historical_dtypes(self, dtypes=[], years=[], months=[]):
+        '''
+        Returns dict of available historical data types for this buoy based on inputs.
+        Note: Depending on inputs, this method is quite slow. TODO Make it faster.
+        Inputs :
+            dtypes : Optional. List of dtype strings to get available months and years for. Default is all dtypes.
+            years : Optional. List of year ints to get available dtypes for.
+            months : Optional. List of month ints to get available dtypes for.
+        Output :
+            dictionary representing available historical data based on inputs.
+        '''
+        available = {}
+        # If no inputs are provided, get all available data types.
+        if len(dtypes) == 0 and len(years) == 0 and len(months) == 0:
+            dtypes = self.historical.DTYPES
+        for dtype in dtypes:
+            available[dtype] = {}
+            available[dtype]['months']=self.historical._available_months(dtype)
+            available[dtype]['years']=self.historical._available_years(dtype)
+        if len(years) > 0:
+            available['years'] = {}
+            for year in years:
+                available['years'][year] = self.historical._available_dtypes_year(year)
+        if len(months) > 0:
+            available['months'] = {}
+            for month in months:
+                available['months'][month] = self.historical._available_dtypes_month(month)
+        return available
+
+    def _get_metadata(self):
+        ''' Helper method to populate metadata field with relevant information. '''
+        stations = self.get_buoys()
+        # Check if buoy id is valid
+        if self.buoy_id not in stations.index:
+            raise ValueError("{} is not a valid buoy id. Use static method Buoy.get_buoys() to get dataframe of all buoys.".format(self.buoy_id))
+        buoy_info = stations.loc[self.buoy_id,:]
+        metadata = {}
+        metadata['buoy_id'] = self.buoy_id
+        metadata['owner'] = self._get_owner_name(buoy_info['owner'])
+        metadata['ttype'] = buoy_info['ttype']
+        metadata['hull'] = buoy_info['hull']
+        metadata['name'] = buoy_info['name']
+        metadata['latitude'] = re.search('.{7}[NS]', buoy_info['location']).group(0)
+        metadata['longitude'] = re.search('.{7}[WE]', buoy_info['location']).group(0)
+        metadata['timezone'] = buoy_info['timezone']
+        metadata['forecast'] = buoy_info['forecast']  # More Forecasts: https://www.ndbc.noaa.gov/data/DAB_Forecasts/46087fc.html, https://www.ndbc.noaa.gov/data/Forecasts/
+        metadata['note'] = buoy_info['note']
+        # metadata['available historical'] = {"dtype":[years]}
+        return metadata
+
+    def _get_owner_name(self, owner_code):
+        ''' Metadata helper function gets a buoy owner's full name based on buoy owner code. '''
+        OWNERS_URL = "https://www.ndbc.noaa.gov/data/stations/station_owners.txt"
         try:
             owners = pd.read_csv(OWNERS_URL, delimiter="|", skiprows=1, index_col=0)
-            owner = owners.loc["{:<3}".format(stations.loc[buoy_id,'owner']), :]
-            self.metadata['owner'] = "{}, {}".format(owner[0].rstrip(), owner[1].rstrip())
+            owner = owners.loc["{:<3}".format(owner_code), :]
+            return "{}, {}".format(owner[0].rstrip(), owner[1].rstrip())
         except:
-            self.metadata['owner'] = 'NaN'
-        self.metadata['ttype'] = stations.loc[buoy_id,'ttype']
-        self.metadata['hull'] = stations.loc[buoy_id,'hull']
-        self.metadata['name'] = stations.loc[buoy_id,'name']
-        self.metadata['latitude'] = re.search('.{7}[NS]', stations.loc[buoy_id,'location']).group(0)
-        self.metadata['longitude'] = re.search('.{7}[WE]', stations.loc[buoy_id,'location']).group(0)
-        self.metadata['timezone'] = stations.loc[buoy_id,'timezone']
-        self.metadata['forecast'] = stations.loc[buoy_id,'forecast']  # More Forecasts: https://www.ndbc.noaa.gov/data/DAB_Forecasts/46087fc.html, https://www.ndbc.noaa.gov/data/Forecasts/
-        self.metadata['note'] = stations.loc[buoy_id,'note']
-        # self.metadata['available historical'] = {"dtype":[years]}
+            return 'NaN'
 
     def __repr__(self):
         return "Station ID: {}\nStation Name: {}\nLocation: {}, {}\nTime Zone: {}\nOwner: {}\nTtype: {}\nNotes: {}".format(

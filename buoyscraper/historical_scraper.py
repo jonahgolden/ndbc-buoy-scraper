@@ -73,32 +73,22 @@ class HistoricalScraper(BuoyDataScraper):
         '''
         df = pd.DataFrame()
         for year in range(self.MIN_YEAR, datetime.now().year):
-            try:
-                data = self.scrape_year(dtype, year)
-                if df.empty:
-                    df = data
-                else:
-                    df = df.append(data)
-            except:
-                pass
+            data = self.scrape_year(dtype, year)
+            if not data.empty:
+                if df.empty: df = data
+                else: df = df.append(data)
         for month in range(1, datetime.now().month):
-            try:
-                data = self.scrape_month(dtype, month)
-                if df.empty:
-                    df = data
-                else:
-                    df = df.append(data)
-            except:
-                pass
-        if not df.empty:
-            if save:
-                self._create_dir_if_not_exists(self.data_dir)
-                path = "{}{}.pkl".format(self.data_dir, dtype)
-                df.to_pickle(path)
-                print("Saved data to {}".format(path))
-            else:
-                return df
-        return None
+            data = self.scrape_month(dtype, month)
+            if not data.empty:
+                if df.empty: df = data
+                else: df = df.append(data)
+        if not df.empty and save:
+            self._create_dir_if_not_exists(self.data_dir)
+            path = "{}{}.pkl".format(self.data_dir, dtype)
+            df.to_pickle(path)
+            print("Saved data to {}".format(path))
+        else:
+            return df
 
     def scrape_year(self, dtype, year):
         '''
@@ -111,15 +101,13 @@ class HistoricalScraper(BuoyDataScraper):
         Output :
             pandas dataframe.
         '''
-        this_year = datetime.now().year 
-        if year < self.MIN_YEAR or year >= this_year:
-            raise Exception("year parameter must be between in range [{}, {}]".format(self.MIN_YEAR, this_year-1))
+        if year < self.MIN_YEAR:
+            raise AttributeError("Minimum year is {}".format(self.MIN_YEAR))
         url = self._make_url_year(dtype, year)
+        df = pd.DataFrame()
         if self._url_valid(url):
             df = getattr(self, dtype)(url)
-            return df
-        else:
-            raise Exception("No data exists for buoy: {}, dtype: {}, year: {}".format(self.buoy_id, dtype, year))
+        return df
 
     def scrape_month(self, dtype, month):
         '''
@@ -134,11 +122,10 @@ class HistoricalScraper(BuoyDataScraper):
         Note: Data for most recent month may not yet be available.
         '''
         url = self._make_url_month(dtype, month)
+        df = pd.DataFrame()
         if self._url_valid(url):
-            df = getattr(self, "_scrape_{}".format(dtype))(url)
-            return df
-        else:
-            raise Exception("No data exists for buoy: {}, dtype: {}, month: {}".format(self.buoy_id, dtype, month))
+            df = getattr(self, dtype)(url)
+        return df
 
     def stdmet(self, url):
         '''
@@ -274,8 +261,42 @@ class HistoricalScraper(BuoyDataScraper):
         NA_VALS, DATE_COLS, DATE_FORMAT = ['MM', 9999.], [0,1,2,3,4,5], "%Y %m %d %H %M %S"
         return self._scrape_norm(url, na_vals=NA_VALS, date_cols=DATE_COLS, date_format=DATE_FORMAT)
 
+    def _available_dtypes_year(self, year):
+        '''Returns list of available data types for a given year.'''
+        available_types = []
+        for dtype in self.DTYPES:
+            if self._url_valid(self._make_url_year(dtype, year)):
+                available_types.append(dtype)
+        return available_types
+
+    def _available_dtypes_month(self, month):
+        '''Returns list of available data types for a given month.'''
+        available_types = []
+        for dtype in self.DTYPES:
+            if self._url_valid(self._make_url_month(dtype, month)):
+                available_types.append(dtype)
+        return available_types
+
+    def _available_years(self, dtype):
+        '''Returns list of available years for a given data type.'''
+        available_years = []
+        for year in range(self.MIN_YEAR, datetime.now().year):
+            if self._url_valid(self._make_url_year(dtype, year)):
+                available_years.append(year)
+        return available_years
+
+    def _available_months(self, dtype):
+        '''Returns list of available months for a given data type.'''
+        available_months = []
+        for month in range(1, datetime.now().month):
+            if self._url_valid(self._make_url_month(dtype, month)):
+                available_months.append(month)
+        return available_months
+
     def _make_url_year(self, dtype, year):
+        '''Makes a url for a given data type and year.'''
         return self.BASE_URL_YEAR.format(self.buoy_id, self.DTYPES[dtype]["url_code"], year, dtype)
 
     def _make_url_month(self, dtype, month):
+        '''Makes a url for a given data type and month.'''
         return self.BASE_URL_MONTH.format(self.buoy_id, self.MONTHS[month]["url_code"], datetime.now().year, dtype, self.MONTHS[month]["name"])
