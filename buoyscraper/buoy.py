@@ -42,8 +42,8 @@ Notes:
 
 import pandas as pd
 import re   # For metadata
-from .realtime_scraper import RealtimeScraper
-from .historical_scraper import HistoricalScraper
+from .datascrapers import RealtimeScraper
+from .datascrapers import HistoricalScraper
 
 class Buoy:
 
