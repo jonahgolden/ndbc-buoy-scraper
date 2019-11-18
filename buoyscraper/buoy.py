@@ -138,6 +138,12 @@ class Buoy:
         '''
         path = "{}{}/historical/{}.pkl".format(self.data_dir, self.buoy_id, dtype)
         return self._load_dataframe(path, timezone)
+    
+    def load_data(self, dtype, cols=None, timezone='UTC'):
+        real, hist = self.load_realtime(dtype, timezone), self.load_historical(dtype, timezone)
+        both = pd.concat([hist, real], sort=True)
+        if cols: return both[cols]
+        else: return both
 
     def _load_dataframe(self, file_path, timezone):
         ''' Helper method to load a pickled dataframe. '''
